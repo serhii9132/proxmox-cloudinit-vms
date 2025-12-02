@@ -30,13 +30,17 @@ deploy_vm() {
     local template_vmid
     
     local bridge="vmbr0"
+    local disk_size=30
 
     echo "Checking for template '${template_name}'..."
     template_vmid=$(is_template_exists "${template_name}")
 
     echo "Cloning template ${template_vmid} to VM ${new_vmid} (${new_vm_name})..."
     qm clone "${template_vmid}" "${new_vmid}" --full true --name "${new_vm_name}"
+
+    qm set ${new_vmid} --delete net0
     qm set "${new_vmid}" --net0 virtio,bridge="${bridge}" 
+    qm disk resize "${new_vmid}" scsi0 "+${disk_size}G"
 
     echo "Starting VM ${new_vmid}..."
     qm start "${new_vmid}"
