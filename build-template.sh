@@ -41,7 +41,9 @@ create_vm() {
     local bridge="vmbr0"
 
     echo "Creating VM ${vm_name} with ID ${vmid}..."
-    qm create "${vmid}" --name "${vm_name}" --memory "${memory}" --cpu "${cpu_type}" --cores "${cores}" --ostype l26
+    qm create "${vmid}" --name "${vm_name}" --memory "${memory}" --cpu "${cpu_type}" --cores "${cores}" \
+    --ostype l26 --net0 virtio,bridge="${bridge}" 
+    qm set "${vmid}" --ipconfig0 ip=dhcp
 }
 
 configure_disks() {
@@ -71,17 +73,19 @@ configure_cloudinit() {
     local vmid=$1
     local os_name=$2
     local storage=$3
-    local hash_root_pass
+    local root_pass
+    local ssh_pub_key 
     
     if [ -f .env ]; then 
         source .env
-        hash_root_pass="${HASH_ROOT_PASS}"
+        root_pass="${ROOT_PASS}"
+        ssh_pub_key="${SSH_PUB_KEY}"
     else
-        handle_error ".env file not found. HASH_ROOT_PASS is required."
+        handle_error ".env file not found. ROOT_PASS and SSH_PUB_KEY are required."
     fi
 
-    if [ -z "$hash_root_pass" ]; then
-        handle_error "HASH_ROOT_PASS is not set in the .env file."
+    if [ -z "$root_pass" ] && [ -z "$ssh_pub_key" ]; then
+        handle_error "ROOT_PASS and SSH_PUB_KEY are not set in the .env file."
     fi
     
     local cloudinit_template_dir="./cicustom"
@@ -89,6 +93,8 @@ configure_cloudinit() {
     local path_to_snippet="/var/lib/vz/snippets"
     local snippet_filename="user-data-${os_name}.yaml"
     local full_snippet_path="${path_to_snippet}/${snippet_filename}"
+    local template_content
+    local final_content
 
     if [ ! -f "${template_file}" ]; then
         handle_error "Cloud-Init template file not found: ${template_file}. Please create it."
@@ -97,12 +103,11 @@ configure_cloudinit() {
     echo "Configuring Cloud-Init for VM ${vmid} using template ${template_file}..."
     mkdir -p "${path_to_snippet}"
 
-    local template_content
-    template_content=$(<"${template_file}") 
+    template_content="$(< ${template_file})" 
 
-    local final_content
     final_content=$(echo "${template_content}" | \
-        sed "s@{{ HASH_ROOT_PASS }}@${hash_root_pass}@g")
+        sed "s|{{ ROOT_PASS }}|${root_pass}|" | \
+        sed "s|{{ SSH_PUB_KEY }}|${ssh_pub_key}|")
 
     echo "${final_content}" > "${full_snippet_path}"
     qm set "${vmid}" --ide2 "${storage}:cloudinit" --agent 1
@@ -132,7 +137,7 @@ main() {
     local download_dir="/tmp"
     local storage="local"
     local image_format="qcow2"
-    local cpu_type="kvm64"
+    local cpu_type="host"
     local vmid="$(pvesh get /cluster/nextid)"
 
     local os_choice
@@ -182,7 +187,7 @@ main() {
     configure_disks "${vmid}" "${image_name}" "${storage}" "${download_dir}" "${image_format}"
     configure_cloudinit "${vmid}" "${os_name}" "${storage}" 
     create_template "${vmid}"
-    # cleanup "${download_dir}" "${image_name}"
+    cleanup "${download_dir}" "${image_name}"
 
     echo "---"
     echo "SUCCESS: Template created for ${vm_name}."
