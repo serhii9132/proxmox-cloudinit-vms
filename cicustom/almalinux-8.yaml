@@ -1,0 +1,27 @@
+#cloud-config
+
+package_update: true
+package_upgrade: true
+packages:
+- qemu-guest-agent
+- python3.12
+- wget
+
+timezone: Europe/Kyiv
+
+disable_root: false
+
+chpasswd:
+  expire: false
+  ssh_pwauth: false
+  users:
+  - {name: root, password: {{ ROOT_PASS }}}
+
+users:
+  - name: root
+    ssh_authorized_keys:
+    - {{ SSH_PUB_KEY }}
+
+runcmd:
+- systemctl enable qemu-guest-agent
+- systemctl start qemu-guest-agent
