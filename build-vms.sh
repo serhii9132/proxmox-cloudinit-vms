@@ -5,36 +5,30 @@ handle_error() {
     exit 1
 }
 
-find_vmid_by_name() {
-    local vm_name=$1
-    qm list | awk -v name="$vm_name" '$2 == name {print $1; exit}'
-}
-
 is_template_exists() {
     local template_name=$1
-    local template_vmid=$(find_vmid_by_name "${template_name}")
-    local is_template
-
-    if [ -z "$template_vmid" ]; then
-        handle_error "Template named '${template_name}' not found. Please create it first using the template creation script."
-    fi
+    local template_vmid=$(qm list | awk -v name="$template_name" '$2 == name {print $1; exit}')
 
     echo "${template_vmid}"
 }
 
-
 deploy_vm() {
     local template_name=$1
     local new_vmid=$2
-    local new_vm_name=$3 
-    local template_vmid
+    local new_vm_name=$3
     
     local bridge="vmbr0"
     local disk_size=30
 
+    local template_vmid
+
     echo "Checking for template '${template_name}'..."
     template_vmid=$(is_template_exists "${template_name}")
 
+    if [[ -z "${template_vmid}" ]]; then
+        handle_error "Template named '${template_name}' not found. Create it first using the template creation script."
+    fi
+    
     echo "Cloning template ${template_vmid} to VM ${new_vmid} (${new_vm_name})..."
     qm clone "${template_vmid}" "${new_vmid}" --full true --name "${new_vm_name}"
 
