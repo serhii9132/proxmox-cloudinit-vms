@@ -1,9 +1,8 @@
 #!/bin/bash
 
-handle_error() {
-    echo "Error: $1" >&2
-    exit 1
-}
+set -o errexit
+set -o pipefail
+set -o nounset
 
 check_existing_template_by_name() {
     local vm_name=$1
@@ -24,29 +23,21 @@ download_image() {
     local full_image_path="${download_dir}/${image_name}"
 
     echo "Downloading image ${image_name}..."
-    wget -O "${full_image_path}" --continue "${image_url}/${image_name}"
-    
-    if [ ! -f "${full_image_path}" ]; then
-        handle_error "Failed to download image."
-    fi
+    wget --output-document="${full_image_path}" --continue "${image_url}/${image_name}"
 }
 
 create_vm() {
     local vmid=$1
     local vm_name=$2
     local cpu_type=$3
-    local static_ip_cidr=$4
 
     local memory=2048
     local cores=2
     local bridge="vmbr0"
-    local gateway="192.168.0.1"
-
-    local ipconfig_setting="ip=${static_ip_cidr},gw=${gateway}"
 
     echo "Creating VM ${vm_name} with ID ${vmid}..."
-    qm create "${vmid}" --name "${vm_name}" --memory "${memory}" --cpu "${cpu_type}" --cores "${cores}" --ostype l26 --agent 1
-    qm set "${vmid}" --net0 virtio,bridge="${bridge}" --ipconfig0 ip="${static_ip_cidr}",gw="${gateway}"
+    qm create "${vmid}" --name "${vm_name}" --memory "${memory}" --cpu "${cpu_type}" --cores "${cores}" --ostype l26 --agent 1 --serial0 socket
+    # qm set "${vmid}" --net0 virtio,bridge="${bridge}" --ipconfig0 ip=dhcp
 }
 
 configure_disks() {
@@ -62,14 +53,10 @@ configure_disks() {
     qm importdisk "${vmid}" "${full_image_path}" "${storage}" --format "${image_format}"
 
     disk_path=$(qm config "${vmid}" | grep "unused0" | awk '{print $2}' | sed 's/,.*//')
-    if [ -z "$disk_path" ]; then
-        handle_error "Could not find path to imported disk."
-    fi
 
     echo "Configuring disks for VM ${vmid}..."
     qm set "${vmid}" --scsihw virtio-scsi-pci --scsi0 "${disk_path}"
     qm set "${vmid}" --boot c --bootdisk scsi0
-    qm set "${vmid}" --serial0 socket
 }
 
 configure_cloudinit() {
@@ -79,17 +66,12 @@ configure_cloudinit() {
     local root_pass
     local ssh_pub_key 
     
-    if [ -f .env ]; then 
-        source .env
-        root_pass="${ROOT_PASS}"
-        ssh_pub_key="${SSH_PUB_KEY}"
-    else
-        handle_error ".env file not found. ROOT_PASS and SSH_PUB_KEY are required."
+    if [ ! -f .env ]; then 
+        echo ".env doesn't exist...\nExit"
+        exit 1 
     fi
 
-    if [ -z "$root_pass" ] && [ -z "$ssh_pub_key" ]; then
-        handle_error "ROOT_PASS and SSH_PUB_KEY are not set in the .env file."
-    fi
+    source .env
     
     local cloudinit_template_dir="./cicustom"
     local template_file="${cloudinit_template_dir}/${os_name}.yaml"
@@ -100,7 +82,8 @@ configure_cloudinit() {
     local final_content
 
     if [ ! -f "${template_file}" ]; then
-        handle_error "Cloud-Init template file not found: ${template_file}. Please create it."
+        echo "Cloud-Init template file not found: ${template_file}"
+        exit 1 
     fi
 
     echo "Configuring Cloud-Init for VM ${vmid} using template ${template_file}..."
@@ -109,8 +92,8 @@ configure_cloudinit() {
     template_content="$(< ${template_file})" 
 
     final_content=$(echo "${template_content}" | \
-        sed "s|{{ ROOT_PASS }}|${root_pass}|" | \
-        sed "s|{{ SSH_PUB_KEY }}|${ssh_pub_key}|")
+        sed "s|{{ ROOT_PASS }}|${ROOT_PASS}|" | \
+        sed "s|{{ SSH_PUB_KEY }}|${SSH_PUB_KEY}|")
 
     echo "${final_content}" > "${full_snippet_path}"
     qm set "${vmid}" --ide2 "${storage}:cloudinit"
@@ -148,7 +131,6 @@ main() {
     local vm_name
     local image_name
     local image_url
-    local static_ip_cidr
 
     echo "Select the operating system for the VM template creation:"
     echo "1) Debian 12"
@@ -163,21 +145,18 @@ main() {
             image_name="debian-12-generic-amd64.qcow2"
             image_url="https://cdimage.debian.org/images/cloud/bookworm/latest/"
             vm_name="debian-12-tmp"
-            static_ip_cidr="192.168.0.20/24"
             ;;
         2)
             os_name="ubuntu"
             image_name="jammy-server-cloudimg-amd64.img"
             image_url="https://cloud-images.ubuntu.com/jammy/current/"
             vm_name="ubuntu-22.04-tmp"
-            static_ip_cidr="192.168.0.21/24"
             ;;
         3)
             os_name="almalinux-8"
             image_name="AlmaLinux-8-GenericCloud-latest.x86_64.qcow2"
             image_url="https://repo.almalinux.org/almalinux/8/cloud/x86_64/images/"
             vm_name="almalinux-8-tmp"
-            static_ip_cidr="192.168.0.22/24"
             ;;
         *)
             echo "Invalid choice. Enter a number from 1 to 3"
@@ -189,7 +168,7 @@ main() {
     fi
     
     download_image "${image_name}" "${image_url}" "${download_dir}"
-    create_vm "${vmid}" "${vm_name}" "${cpu_type}" "${static_ip_cidr}"
+    create_vm "${vmid}" "${vm_name}" "${cpu_type}"
     configure_disks "${vmid}" "${image_name}" "${storage}" "${download_dir}" "${image_format}"
     configure_cloudinit "${vmid}" "${os_name}" "${storage}" 
     create_template "${vmid}"
@@ -201,4 +180,4 @@ main() {
     echo "---"
 }
 
-main "$1"
+main
