@@ -20,6 +20,10 @@ These scripts are used for testing and are not intended for production use. For 
 ```sh
 ROOT_PASS='$passwordhash12345'                  # Use: mkpasswd -m sha-512
 SSH_PUB_KEY='ssh-ed25519 AAAAC3NzaCAAAAABBBBBCCCCC11... user@hostname'
+
+SUBNET_BASE="192.168.0."
+GATEWAY="192.168.0.1"
+MASK="24"
 ```
 2. Run **bash build-template.sh** to create the template
 3. Run **bash build-vms.sh**
