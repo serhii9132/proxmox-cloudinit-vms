@@ -1,9 +1,8 @@
 #!/bin/bash
 
-handle_error() {
-    echo "Error: $1" >&2
-    exit 1
-}
+set -o errexit
+set -o pipefail
+set -o nounset
 
 is_template_exists() {
     local template_name=$1
@@ -16,6 +15,7 @@ deploy_vm() {
     local template_name=$1
     local new_vmid=$2
     local new_vm_name=$3
+    local new_vm_ip=$4
     
     local bridge="vmbr0"
     local disk_size=30
@@ -26,16 +26,23 @@ deploy_vm() {
     template_vmid=$(is_template_exists "${template_name}")
 
     if [[ -z "${template_vmid}" ]]; then
-        handle_error "Template named '${template_name}' not found. Create it first using the template creation script."
+        echo "Template named '${template_name}' not found. Create it first using the template creation script."
+        exit 1
     fi
     
     echo "Cloning template ${template_vmid} to VM ${new_vmid} (${new_vm_name})..."
     qm clone "${template_vmid}" "${new_vmid}" --full true --name "${new_vm_name}"
 
-    qm set ${new_vmid} --delete net0
-    qm set "${new_vmid}" --net0 virtio,bridge="${bridge}" 
+    qm set "${new_vmid}" --net0 virtio,bridge="${bridge}" --ipconfig0 ip="${new_vm_ip}/${MASK},gw=${GATEWAY}"
+    
     qm disk resize "${new_vmid}" scsi0 "+${disk_size}G"
 
+    echo "Configuration complete:"
+    echo "  - VMID: ${new_vmid}"
+    echo "  - Name: ${new_vm_name}"
+    echo "  - IP:   ${new_vm_ip}/${MASK}"
+    echo "  - GW:   ${GATEWAY}"
+    
     echo "Starting VM ${new_vmid}..."
     qm start "${new_vmid}"
 }
@@ -46,13 +53,18 @@ main() {
         exit 1
     fi
     
-    local new_vmid="$(pvesh get /cluster/nextid)"
+    if [ ! -f .env ]; then
+        echo ".env doesn't exist... Exit"
+        exit 1
+    fi
+
+    source .env
+
+    local num_vms_to_deploy
     local os_choice
     local template_name
-    local new_vm_name
     local os_short_name
-    local response
-        
+    
     echo "Select the operating system template for deployment:"
     echo "1) Debian 12"
     echo "2) Ubuntu 22.04"
@@ -74,13 +86,27 @@ main() {
             os_short_name="alma8"
             ;;
         *)
-            echo "Invalid choice. Enter a number from 1 or 3"
+            echo "Invalid choice. Enter a number from 1 to 3."
             exit 1
             ;;
     esac
     
-    new_vm_name="${os_short_name}-vm-${new_vmid}"
-    deploy_vm "${template_name}" "${new_vmid}" "${new_vm_name}"
+    echo "---"
+    read -p "Enter the number of VMs to deploy (1-3): " num_vms_to_deploy
+    if ! [[ "$num_vms_to_deploy" =~ ^[1-3]$ ]]; then
+        echo "Invalid number of VMs. Must be between 1 and 3."
+        exit 1
+    fi
+    
+    echo -e "\nStarting deployment of ${num_vms_to_deploy} VMs from template '${template_name}'..."
+
+    for i in $(seq 1 ${num_vms_to_deploy}); do
+        local new_vmid="$(pvesh get /cluster/nextid)"
+        local new_vm_name="${os_short_name}-vm-${new_vmid}"
+        local new_vm_ip="${SUBNET_BASE}${new_vmid}" 
+        
+        deploy_vm "${template_name}" "${new_vmid}" "${new_vm_name}" "${new_vm_ip}" "${GATEWAY}"
+    done
 }
 
 main
