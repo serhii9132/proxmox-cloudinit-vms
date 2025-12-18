@@ -1,6 +1,7 @@
 Scripts for deployment of virtual machines in the Proxmox VE environment.
 Supported images:
 - Debian 12
+- Debian 13
 - Ubuntu 22.04
 - AlmaLinux 8.10
 

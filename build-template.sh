@@ -134,8 +134,9 @@ main() {
 
     echo "Select the operating system for the VM template creation:"
     echo "1) Debian 12"
-    echo "2) Ubuntu 22.04"
-    echo "3) AlmaLinux 8"
+    echo "2) Debian 13"
+    echo "3) Ubuntu 22.04"
+    echo "4) AlmaLinux 8"
     echo "---"
     read -p "Enter the number (1-3): " os_choice
 
@@ -147,19 +148,25 @@ main() {
             vm_name="debian-12-tmp"
             ;;
         2)
+            os_name="debian"
+            image_name="debian-13-generic-amd64.qcow2"
+            image_url="https://cdimage.debian.org/images/cloud/trixie/latest/"
+            vm_name="debian-13-tmp"
+            ;;
+        3)
             os_name="ubuntu"
             image_name="jammy-server-cloudimg-amd64.img"
             image_url="https://cloud-images.ubuntu.com/jammy/current/"
             vm_name="ubuntu-22.04-tmp"
             ;;
-        3)
+        4)
             os_name="almalinux-8"
             image_name="AlmaLinux-8-GenericCloud-latest.x86_64.qcow2"
             image_url="https://repo.almalinux.org/almalinux/8/cloud/x86_64/images/"
             vm_name="almalinux-8-tmp"
             ;;
         *)
-            echo "Invalid choice. Enter a number from 1 to 3"
+            echo "Invalid choice. Enter a number from 1 to 4"
             exit 1
     esac
 

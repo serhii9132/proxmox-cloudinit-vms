@@ -67,10 +67,11 @@ main() {
     
     echo "Select the operating system template for deployment:"
     echo "1) Debian 12"
-    echo "2) Ubuntu 22.04"
-    echo "3) AlmaLinux 8"
+    echo "2) Debian 13"
+    echo "3) Ubuntu 22.04"
+    echo "4) AlmaLinux 8"
     echo "---"
-    read -p "Enter the number (1-3): " os_choice
+    read -p "Enter the number (1-4): " os_choice
     
     case "$os_choice" in
         1)
@@ -78,15 +79,19 @@ main() {
             os_short_name="debian12"
             ;;
         2)
+            template_name="debian-13-tmp"
+            os_short_name="debian13"
+            ;;
+        3)
             template_name="ubuntu-22.04-tmp"
             os_short_name="ubuntu22"
             ;;
-        3)
+        4)
             template_name="almalinux-8-tmp"
             os_short_name="alma8"
             ;;
         *)
-            echo "Invalid choice. Enter a number from 1 to 3."
+            echo "Invalid choice. Enter a number from 1 to 4."
             exit 1
             ;;
     esac
